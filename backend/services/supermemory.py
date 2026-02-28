@@ -34,7 +34,7 @@ async def add_memory(content: str, tags: list[str]) -> dict:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.post(
-                f"{SUPERMEMORY_BASE_URL}/memories",
+                f"{SUPERMEMORY_BASE_URL}/documents",
                 headers=_headers(),
                 json=payload,
             )
@@ -61,10 +61,17 @@ async def search_memory(query: str, tags: list[str] | None = None) -> list[dict]
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get(
-                f"{SUPERMEMORY_BASE_URL}/memories/search",
+                f"{SUPERMEMORY_BASE_URL}/documents/search",
                 headers=_headers(),
                 params=params,
             )
+            if response.status_code != 200:
+                logger.warning(
+                    "Supermemory search returned HTTP %s — endpoint may be incorrect "
+                    "(expected /v3/documents/search). Body: %.300s",
+                    response.status_code,
+                    response.text,
+                )
             response.raise_for_status()
             data = response.json()
             return data.get("results", data) if isinstance(data, dict) else data

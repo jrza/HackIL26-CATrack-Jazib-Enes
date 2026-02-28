@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -13,9 +14,9 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 BEDROCK_MODEL_ID = os.getenv(
-    "BEDROCK_MODEL_ID", "anthropic.claude-3-5-sonnet-20241022-v2:0"
+    "BEDROCK_MODEL_ID", "anthropic.claude-3-5-haiku-20251001"
 )
 
 ESCALATION_SYSTEM_PROMPT = (
@@ -82,7 +83,8 @@ async def escalate_finding(finding_data: dict, machine_history: str) -> dict:
 
     try:
         client = _get_client()
-        response = client.converse(
+        response = await asyncio.to_thread(
+            client.converse,
             modelId=BEDROCK_MODEL_ID,
             system=[{"text": ESCALATION_SYSTEM_PROMPT}],
             messages=[{"role": "user", "content": [{"text": user_content}]}],

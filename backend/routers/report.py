@@ -40,7 +40,7 @@ async def generate_report(inspection_id: str):
     if supabase:
         try:
             session_result = (
-                supabase.table("inspection_sessions")
+                supabase.table("inspections")
                 .select("asset_id")
                 .eq("id", inspection_id)
                 .execute()

@@ -37,7 +37,7 @@ async def start_inspection(body: InspectionCreate):
     supabase = get_client()
     if supabase:
         try:
-            supabase.table("inspection_sessions").insert(
+            supabase.table("inspections").insert(
                 {**session_data, "status": InspectionStatus.ACTIVE.value}
             ).execute()
         except Exception as exc:
@@ -56,7 +56,7 @@ async def get_inspection(inspection_id: str):
     if supabase:
         try:
             result = (
-                supabase.table("inspection_sessions")
+                supabase.table("inspections")
                 .select("*")
                 .eq("id", inspection_id)
                 .execute()
@@ -82,7 +82,7 @@ async def get_active_inspection(asset_id: str):
     if supabase:
         try:
             result = (
-                supabase.table("inspection_sessions")
+                supabase.table("inspections")
                 .select("*")
                 .eq("asset_id", asset_id)
                 .eq("status", InspectionStatus.ACTIVE.value)
@@ -111,7 +111,7 @@ async def update_inspection(inspection_id: str, body: InspectionUpdate):
         if supabase:
             try:
                 result = (
-                    supabase.table("inspection_sessions")
+                    supabase.table("inspections")
                     .select("*")
                     .eq("id", inspection_id)
                     .execute()
@@ -137,7 +137,7 @@ async def update_inspection(inspection_id: str, body: InspectionUpdate):
     supabase = get_client()
     if supabase:
         try:
-            supabase.table("inspection_sessions").update(updates).eq("id", inspection_id).execute()
+            supabase.table("inspections").update(updates).eq("id", inspection_id).execute()
         except Exception as exc:
             logger.warning("Could not update Supabase record: %s", exc)
 

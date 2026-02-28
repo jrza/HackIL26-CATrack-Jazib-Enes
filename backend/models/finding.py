@@ -30,6 +30,9 @@ class FindingCreate(BaseModel):
     inspection_id: str
     component: str
     voice_transcript: Optional[str] = None
+    # Base64-encoded image from camera/glasses (plain base64 or data-URI prefix accepted).
+    # image_url is kept for backwards-compat when a pre-uploaded URL is supplied instead.
+    image_b64: Optional[str] = None
     image_url: Optional[str] = None
 
 

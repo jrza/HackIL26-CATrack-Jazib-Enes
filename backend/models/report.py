@@ -14,9 +14,11 @@ class Report(BaseModel):
     id: str
     inspection_id: str
     asset_id: str
+    inspection_started_at: Optional[datetime] = None
     generated_at: datetime
     status: ReportStatus
     findings: list[Finding]
+    total_findings: int
     summary: str
     critical_count: int
     moderate_count: int

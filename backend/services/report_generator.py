@@ -6,6 +6,13 @@ from models.finding import Finding, Severity
 
 logger = logging.getLogger(__name__)
 
+_SEVERITY_ORDER: dict[Severity, int] = {
+    Severity.CRITICAL: 0,
+    Severity.MODERATE: 1,
+    Severity.MONITOR: 2,
+    Severity.PASS: 3,
+}
+
 
 def _count_by_severity(findings: list[Finding]) -> dict[str, int]:
     counts = {"critical": 0, "moderate": 0, "monitor": 0, "pass": 0}
@@ -67,19 +74,28 @@ async def generate_report(
             except Exception as exc:
                 logger.warning("Skipping malformed finding: %s", exc)
 
+    finding_objects.sort(key=lambda f: _SEVERITY_ORDER.get(f.severity, 99))
+
     counts = _count_by_severity(finding_objects)
     summary = _build_summary(counts, machine)
 
     report_id = str(uuid.uuid4())
     asset_id = machine.get("asset_id", "unknown")
 
+    # Derive inspection start time from the earliest finding timestamp.
+    inspection_started_at: str | None = None
+    if finding_objects:
+        inspection_started_at = min(f.timestamp for f in finding_objects).isoformat()
+
     report = {
         "id": report_id,
         "inspection_id": inspection_id,
         "asset_id": asset_id,
+        "inspection_started_at": inspection_started_at,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "status": "FINAL",
         "findings": [f.model_dump() for f in finding_objects],
+        "total_findings": len(finding_objects),
         "summary": summary,
         "critical_count": counts["critical"],
         "moderate_count": counts["moderate"],

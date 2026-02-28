@@ -3,7 +3,6 @@ OUTPUT_SCHEMA_PROMPT = """
 
 Return a single JSON object with exactly the following fields:
 
-```json
 {
   "component": "<string – name of the inspected component, e.g. 'Left Rear Tire'>",
   "issue": "<string – short title of the finding, e.g. 'Sidewall Cracking'>",
@@ -15,7 +14,6 @@ Return a single JSON object with exactly the following fields:
   "timestamp": "<ISO 8601 UTC datetime string, e.g. '2024-05-01T14:30:00Z'>",
   "image_url": "<string URL of the evidence image, or null if none>"
 }
-```
 
 ### Field Rules
 - `severity` must be exactly one of: PASS, MONITOR, MODERATE, CRITICAL (uppercase).

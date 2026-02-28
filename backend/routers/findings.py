@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from db.supabase_client import get_client
-from models.finding import FindingCreate, FindingResponse, Severity
+from models.finding import FindingCreate, FindingResponse
 from services import local_llm, supermemory, bedrock, sync_queue
 
 router = APIRouter()
@@ -33,7 +33,7 @@ async def submit_finding(body: FindingCreate, background_tasks: BackgroundTasks)
     if supabase:
         try:
             session_result = (
-                supabase.table("inspection_sessions")
+                supabase.table("inspections")
                 .select("asset_id")
                 .eq("id", body.inspection_id)
                 .execute()
@@ -47,7 +47,7 @@ async def submit_finding(body: FindingCreate, background_tasks: BackgroundTasks)
 
     llm_result = await local_llm.classify_finding(
         voice_transcript=body.voice_transcript or "",
-        image_url=body.image_url,
+        image_b64=body.image_b64,
         component=body.component,
         machine_history=machine_history,
     )
@@ -61,12 +61,12 @@ async def submit_finding(body: FindingCreate, background_tasks: BackgroundTasks)
         "component": llm_result.get("component", body.component),
         "issue": llm_result.get("issue", "Unknown Issue"),
         "description": llm_result.get("description", ""),
-        "severity": llm_result.get("severity", Severity.MONITOR.value),
+        "severity": llm_result.get("severity", "MONITOR"),
         "confidence": float(llm_result.get("confidence", 0.5)),
         "recommended_action": llm_result.get("recommended_action", ""),
         "operational_impact": llm_result.get("operational_impact", ""),
         "timestamp": timestamp,
-        "image_url": llm_result.get("image_url") or body.image_url,
+        "image_url": llm_result.get("image_url") or body.image_url,  # null when image sent as b64
         "voice_transcript": body.voice_transcript,
     }
 
@@ -90,9 +90,18 @@ async def submit_finding(body: FindingCreate, background_tasks: BackgroundTasks)
         tags=[asset_id, finding_data.get("component", "").lower()],
     )
 
-    severity_val = finding_data["severity"]
-    if severity_val in (Severity.MODERATE.value, Severity.CRITICAL.value):
+    # Confidence-based routing (per copilot-instructions.md):
+    #   < 0.7  → needs_human_review: finding flagged, no cloud escalation
+    #   0.7–0.89 → needs_escalation: send to Bedrock for second opinion
+    #   ≥ 0.9  → high confidence: trust local result, no escalation needed
+    if llm_result.get("needs_escalation"):
         background_tasks.add_task(_escalate_in_background, finding_data, asset_id)
+    if llm_result.get("needs_human_review"):
+        logger.warning(
+            "Finding %s flagged for human review (confidence=%.2f).",
+            finding_id,
+            finding_data["confidence"],
+        )
 
     return FindingResponse(**finding_data)
 

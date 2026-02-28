@@ -55,7 +55,7 @@ async def escalate_finding(body: EscalationRequest):
     if supabase:
         try:
             session_result = (
-                supabase.table("inspection_sessions")
+                supabase.table("inspections")
                 .select("asset_id")
                 .eq("id", body.inspection_id)
                 .execute()
