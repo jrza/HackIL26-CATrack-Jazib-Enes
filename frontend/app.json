@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "CAT Inspect AI Co-Pilot",
+    "slug": "cat-inspect-copilot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.caterpillar.inspectcopilot",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used to capture photos of equipment components during inspection.",
+        "NSMicrophoneUsageDescription": "Microphone is used to record voice descriptions of equipment issues."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.caterpillar.inspectcopilot",
+      "permissions": ["CAMERA", "RECORD_AUDIO", "READ_EXTERNAL_STORAGE"]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-barcode-scanner",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow CAT Inspect to access your photos.",
+          "cameraPermission": "Allow CAT Inspect to use the camera."
+        }
+      ]
+    ],
+    "scheme": "catinspect"
+  }
+}
