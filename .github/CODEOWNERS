@@ -1,0 +1,10 @@
+# CAT Inspect AI Co-Pilot — Code Owners
+# backend owned by Jazib
+backend/ @jrza
+
+# frontend and glasses owned by teammate Enes
+frontend/ @enes-teammate
+glasses/ @enes-teammate
+
+# docs owned by both
+docs/ @jrza @enes-teammate
