@@ -1,7 +1,9 @@
+import ipaddress
 import json
 import logging
 import os
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
 import httpx
 from dotenv import load_dotenv
@@ -35,7 +37,30 @@ COMPONENT_PROMPTS: dict[str, str] = {
 }
 
 
-def _pick_component_prompt(component: str) -> str:
+def _is_safe_url(url: str) -> bool:
+    """Return True only for http/https URLs pointing to non-private, non-loopback hosts."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname or ""
+        if not hostname:
+            return False
+        # Block loopback and link-local names
+        if hostname in ("localhost",) or hostname.endswith(".local"):
+            return False
+        try:
+            addr = ipaddress.ip_address(hostname)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return False
+        except ValueError:
+            pass  # hostname is a domain name – allow it
+        return True
+    except Exception:
+        return False
+
+
+
     component_lower = component.lower()
     for keyword, prompt in COMPONENT_PROMPTS.items():
         if keyword in component_lower:
@@ -98,17 +123,20 @@ async def classify_finding(
     }
 
     if image_url:
-        # Fetch the image and encode it as base64 for the multimodal model.
-        try:
-            async with httpx.AsyncClient(timeout=30) as fetcher:
-                img_response = await fetcher.get(image_url)
-                img_response.raise_for_status()
-                import base64
+        # Validate URL before fetching to prevent SSRF.
+        if not _is_safe_url(image_url):
+            logger.warning("Rejected unsafe image_url (SSRF guard): %s", image_url)
+        else:
+            try:
+                async with httpx.AsyncClient(timeout=30) as fetcher:
+                    img_response = await fetcher.get(image_url)
+                    img_response.raise_for_status()
+                    import base64
 
-                b64_image = base64.b64encode(img_response.content).decode("utf-8")
-                payload["images"] = [b64_image]
-        except Exception as img_err:
-            logger.warning("Could not fetch image %s: %s", image_url, img_err)
+                    b64_image = base64.b64encode(img_response.content).decode("utf-8")
+                    payload["images"] = [b64_image]
+            except Exception as img_err:
+                logger.warning("Could not fetch image %s: %s", image_url, img_err)
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
