@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from db.supabase_client import get_client
 from models.finding import FindingCreate, FindingResponse, Severity
-from services import local_llm, supermemory, azure_openai, sync_queue
+from services import local_llm, supermemory, bedrock, sync_queue
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ _findings: dict[str, list[dict]] = {}
 
 async def _escalate_in_background(finding_data: dict, asset_id: str) -> None:
     machine_history = await supermemory.get_machine_history(asset_id)
-    result = await azure_openai.escalate_finding(finding_data, machine_history)
+    result = await bedrock.escalate_finding(finding_data, machine_history)
     logger.info(
         "Escalation complete for finding %s: validated_severity=%s",
         finding_data.get("id"),

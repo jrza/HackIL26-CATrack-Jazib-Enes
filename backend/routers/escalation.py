@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from services import azure_openai, supermemory
+from services import bedrock, supermemory
 from routers.findings import _findings as in_memory_findings
 
 router = APIRouter()
@@ -67,7 +67,7 @@ async def escalate_finding(body: EscalationRequest):
 
     machine_history = await supermemory.get_machine_history(asset_id)
 
-    escalation_result = await azure_openai.escalate_finding(finding_data, machine_history)
+    escalation_result = await bedrock.escalate_finding(finding_data, machine_history)
     escalation_result["finding_id"] = body.finding_id
     escalation_result["inspection_id"] = body.inspection_id
     escalation_result.setdefault("escalation_timestamp", datetime.now(timezone.utc).isoformat())

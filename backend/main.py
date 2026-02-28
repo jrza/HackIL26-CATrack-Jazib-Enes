@@ -33,7 +33,7 @@ app = FastAPI(
     title="CAT Inspect AI Co-Pilot",
     description=(
         "AI-powered equipment inspection assistant for Caterpillar heavy machinery. "
-        "Combines local LLM (LLaVA via Ollama), cloud AI (Azure OpenAI), "
+        "Combines local LLM (LLaVA via Ollama), cloud AI (Amazon Bedrock — Claude 3.5 Sonnet), "
         "persistent memory (Supermemory), and offline-first sync (Supabase)."
     ),
     version="1.0.0",

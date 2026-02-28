@@ -207,7 +207,7 @@ Mark an inspection as completed and trigger report generation.
 ## 5. Findings
 
 ### `POST /findings`
-Submit a new finding for an active inspection. The backend calls the AI engine to analyze the finding and enrich it with severity, confidence, and recommended action.
+Submit a new finding for an active inspection. The backend calls **Ollama/LLaVA** (local LLM) to analyze the finding and enrich it with severity, confidence, and recommended action. Findings with severity `MODERATE` or `CRITICAL` are automatically escalated to **Amazon Bedrock (Claude 3.5 Sonnet)** for a second-opinion expert review.
 
 **Request Body**
 ```json

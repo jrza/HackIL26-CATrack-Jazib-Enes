@@ -12,7 +12,7 @@ Complete these steps **at least 15 minutes** before presenting:
 - [ ] Backend running: `cd backend && uvicorn main:app --reload` — verify `GET /health` returns `{"status":"ok"}`
 - [ ] Frontend running on device/emulator: `cd frontend && npx expo start`
 - [ ] Demo asset seeded in DB: confirm `GET /machine/CAT-001` returns data
-- [ ] `.env` set with valid `OPENAI_API_KEY`
+- [ ] `.env` set with valid `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (for Bedrock escalation)
 - [ ] Phone/emulator on same Wi-Fi as laptop (or using Expo Go tunnel)
 - [ ] Screen mirroring or emulator visible on projector
 - [ ] Glasses (if demo-ing): voice_handler and image_handler running, webhook URL set in Meta View app
@@ -63,7 +63,7 @@ Complete these steps **at least 15 minutes** before presenting:
 
 **Talking points**:
 - The voice transcript is sent to `POST /findings`
-- The backend calls GPT-4o, which classifies severity as **High** and recommends: *"Replace left boom cylinder seal before next shift"*
+  - The backend calls Ollama/LLaVA locally for initial classification. If severity is MODERATE or CRITICAL it escalates to **Amazon Bedrock (Claude 3.5 Sonnet)**, which validates severity and recommends: *"Replace left boom cylinder seal before next shift"*
 - The finding is stored with a confidence score — inspectors can see how certain the AI is
 - This replaces 10 minutes of manual note-taking with a 10-second voice command
 
