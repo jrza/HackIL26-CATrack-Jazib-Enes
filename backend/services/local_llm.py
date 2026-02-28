@@ -37,28 +37,32 @@ COMPONENT_PROMPTS: dict[str, str] = {
 }
 
 
-def _is_safe_url(url: str) -> bool:
-    """Return True only for http/https URLs pointing to non-private, non-loopback hosts."""
+def _safe_image_url(url: str) -> str | None:
+    """
+    Validate and reconstruct an image URL to prevent SSRF.
+    Returns a URL rebuilt from its parsed components (breaking taint), or None if unsafe.
+    """
     try:
         parsed = urlparse(url)
-        if parsed.scheme not in ("http", "https"):
-            return False
-        hostname = parsed.hostname or ""
-        if not hostname:
-            return False
-        # Block loopback and link-local names
-        if hostname in ("localhost",) or hostname.endswith(".local"):
-            return False
+        scheme = parsed.scheme.lower()
+        if scheme not in ("http", "https"):
+            return None
+        hostname = (parsed.hostname or "").lower()
+        if not hostname or hostname == "localhost" or hostname.endswith(".local"):
+            return None
         try:
             addr = ipaddress.ip_address(hostname)
             if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
-                return False
+                return None
         except ValueError:
-            pass  # hostname is a domain name – allow it
-        return True
-    except Exception:
-        return False
+            pass  # domain name – continue
 
+        # Rebuild from parsed components so the result is not tainted by the raw input.
+        path = parsed.path or "/"
+        query = f"?{parsed.query}" if parsed.query else ""
+        return f"{scheme}://{parsed.netloc}{path}{query}"
+    except Exception:
+        return None
 
 
     component_lower = component.lower()
@@ -123,8 +127,8 @@ async def classify_finding(
     }
 
     if image_url:
-        # Validate URL before fetching to prevent SSRF.
-        safe_url = image_url if _is_safe_url(image_url) else None
+        # Validate and reconstruct URL to prevent SSRF before fetching.
+        safe_url = _safe_image_url(image_url)
         if safe_url is None:
             logger.warning("Rejected unsafe image_url (SSRF guard): %s", image_url)
         else:
