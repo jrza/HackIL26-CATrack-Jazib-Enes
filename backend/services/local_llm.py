@@ -124,19 +124,20 @@ async def classify_finding(
 
     if image_url:
         # Validate URL before fetching to prevent SSRF.
-        if not _is_safe_url(image_url):
+        safe_url = image_url if _is_safe_url(image_url) else None
+        if safe_url is None:
             logger.warning("Rejected unsafe image_url (SSRF guard): %s", image_url)
         else:
             try:
                 async with httpx.AsyncClient(timeout=30) as fetcher:
-                    img_response = await fetcher.get(image_url)
+                    img_response = await fetcher.get(safe_url)
                     img_response.raise_for_status()
                     import base64
 
                     b64_image = base64.b64encode(img_response.content).decode("utf-8")
                     payload["images"] = [b64_image]
             except Exception as img_err:
-                logger.warning("Could not fetch image %s: %s", image_url, img_err)
+                logger.warning("Could not fetch image: %s", img_err)
 
     try:
         async with httpx.AsyncClient(timeout=60) as client:
