@@ -31,14 +31,11 @@
     },
     "plugins": [
       "expo-router",
-      "expo-barcode-scanner",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow CAT Inspect to access your photos.",
-          "cameraPermission": "Allow CAT Inspect to use the camera."
-        }
-      ]
+      ["expo-camera", { "cameraPermission": "Camera is used to scan QR codes on equipment." }],
+      ["expo-image-picker", {
+        "photosPermission": "Allow CAT Inspect to access your photos.",
+        "cameraPermission": "Allow CAT Inspect to use the camera."
+      }]
     ],
     "scheme": "catinspect"
   }
