@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Modal,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -19,8 +21,15 @@ import CatLogo from "../components/CatLogo";
 import MetaLogo from "../components/MetaLogo";
 import HandsFreeOverlay from "../components/HandsFreeOverlay";
 import { C, HIT, R, S, T } from "../constants/theme";
+import { listMachines, listInspections, Machine, InspectionSession } from "../services/api";
 
 type Icon = React.ComponentProps<typeof Ionicons>["name"];
+
+const STATUS_COLOR: Record<string, string> = {
+  ACTIVE: C.yellow,
+  COMPLETED: C.pass,
+  ABANDONED: C.critical,
+};
 
 const TABS_LEFT: { id: string; label: string; icon: Icon; active: Icon }[] = [
   { id: "fleet", label: "Fleet", icon: "car-outline", active: "car" },
@@ -50,56 +59,7 @@ const MENU_ITEMS: { label: string; icon: Icon; danger?: boolean }[] = [
   { label: "Sign out", icon: "log-out-outline", danger: true },
 ];
 
-interface Inspection {
-  id: string;
-  title: string;
-  type: string;
-  location?: string;
-  lastUpdate: string;
-  number: string;
-}
-
-const INSPECTIONS: Inspection[] = [
-  {
-    id: "1",
-    title: "Daily Inspection",
-    type: "Daily",
-    lastUpdate: "2/28/2026, 12:01:31 PM",
-    number: "27542923",
-  },
-  {
-    id: "2",
-    title: "Daily Inspection",
-    type: "Daily",
-    lastUpdate: "2/28/2026, 12:01:27 PM",
-    number: "27538402",
-  },
-  {
-    id: "3",
-    title: "Daily Inspection",
-    type: "Daily",
-    location: "205 N Goodwin Ave, Urbana, IL",
-    lastUpdate: "2/28/2026, 12:01:18 PM",
-    number: "27542848",
-  },
-  {
-    id: "4",
-    title: "Daily Inspection",
-    type: "Daily",
-    location: "201 N Goodwin Ave, Urbana, IL",
-    lastUpdate: "2/28/2026, 11:10:36 AM",
-    number: "27542000",
-  },
-  {
-    id: "5",
-    title: "Daily Inspection",
-    type: "Daily",
-    lastUpdate: "2/28/2026, 10:51:40 AM",
-    number: "27540025",
-  },
-];
-
-const INSP_TABS = ["In Progress", "Assigned", "Submitted"] as const;
+const INSP_TABS = ["In Progress", "Submitted"] as const;
 
 export default function FleetScreen() {
   const router = useRouter();
@@ -113,16 +73,72 @@ export default function FleetScreen() {
   const slideAnim = useRef(new Animated.Value(-320)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const filteredInspections = useMemo(() => {
-    if (!inspSearch.trim()) return INSPECTIONS;
-    const q = inspSearch.toLowerCase();
-    return INSPECTIONS.filter(
-      (i) =>
-        i.title.toLowerCase().includes(q) ||
-        i.number.includes(q) ||
-        i.location?.toLowerCase().includes(q),
+  const [machines, setMachines] = useState<Machine[]>([]);
+  const [machinesLoading, setMachinesLoading] = useState(false);
+  const [machinesRefreshing, setMachinesRefreshing] = useState(false);
+
+  const [inspections, setInspections] = useState<InspectionSession[]>([]);
+  const [inspLoading, setInspLoading] = useState(false);
+  const [inspRefreshing, setInspRefreshing] = useState(false);
+
+  const loadMachines = useCallback(async (silent = false) => {
+    if (!silent) setMachinesLoading(true);
+    try {
+      const data = await listMachines();
+      setMachines(data);
+    } catch {
+      // silently fail — show empty state
+    } finally {
+      setMachinesLoading(false);
+      setMachinesRefreshing(false);
+    }
+  }, []);
+
+  const loadInspections = useCallback(async (silent = false) => {
+    if (!silent) setInspLoading(true);
+    try {
+      const statusParam = inspFilter === "In Progress" ? "ACTIVE" : "COMPLETED";
+      const data = await listInspections(statusParam);
+      setInspections(data);
+    } catch {
+      // silently fail
+    } finally {
+      setInspLoading(false);
+      setInspRefreshing(false);
+    }
+  }, [inspFilter]);
+
+  useEffect(() => {
+    loadMachines();
+  }, [loadMachines]);
+
+  useEffect(() => {
+    loadInspections();
+  }, [loadInspections]);
+
+  const fleetSearch = useRef<TextInput>(null);
+  const [fleetSearchQuery, setFleetSearchQuery] = useState("");
+
+  const filteredMachines = useMemo(() => {
+    if (!fleetSearchQuery.trim()) return machines;
+    const q = fleetSearchQuery.toLowerCase();
+    return machines.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) ||
+        m.asset_id.toLowerCase().includes(q) ||
+        m.location?.toLowerCase().includes(q),
     );
-  }, [inspSearch]);
+  }, [machines, fleetSearchQuery]);
+
+  const filteredInspections = useMemo(() => {
+    if (!inspSearch.trim()) return inspections;
+    const q = inspSearch.toLowerCase();
+    return inspections.filter(
+      (i) =>
+        i.asset_id.toLowerCase().includes(q) ||
+        i.id.toLowerCase().includes(q),
+    );
+  }, [inspections, inspSearch]);
 
   const openMenu = () => {
     setMenuOpen(true);
@@ -169,9 +185,7 @@ export default function FleetScreen() {
               <TouchableOpacity
                 style={s.headerBtn}
                 activeOpacity={0.5}
-                onPress={() => {
-                  setSearching(false);
-                }}
+                onPress={() => { setSearching(false); setFleetSearchQuery(""); }}
               >
                 <Ionicons name="arrow-back" size={22} color={C.textPrimary} />
               </TouchableOpacity>
@@ -183,15 +197,15 @@ export default function FleetScreen() {
                   placeholder="Search machines..."
                   placeholderTextColor={C.textTertiary}
                   autoFocus
+                  value={fleetSearchQuery}
+                  onChangeText={setFleetSearchQuery}
                 />
               </View>
 
               <TouchableOpacity
                 style={s.headerBtn}
                 activeOpacity={0.5}
-                onPress={() => {
-                  setSearching(false);
-                }}
+                onPress={() => { setSearching(false); setFleetSearchQuery(""); }}
               >
                 <Ionicons name="close" size={20} color={C.textTertiary} />
               </TouchableOpacity>
@@ -246,23 +260,19 @@ export default function FleetScreen() {
         <View style={s.body}>
           {/* Filter tabs */}
           <View style={s.inspFilterBar}>
-            {INSP_TABS.map((f, i) => {
+            {INSP_TABS.map((f) => {
               const on = inspFilter === f;
               return (
-                <React.Fragment key={f}>
-                  {i === INSP_TABS.length - 1 && (
-                    <View style={s.inspFilterDiv} />
-                  )}
-                  <TouchableOpacity
-                    style={[s.inspFilterTab, on && s.inspFilterTabOn]}
-                    onPress={() => setInspFilter(f)}
-                    activeOpacity={0.6}
-                  >
-                    <Text style={[s.inspFilterText, on && s.inspFilterTextOn]}>
-                      {f}
-                    </Text>
-                  </TouchableOpacity>
-                </React.Fragment>
+                <TouchableOpacity
+                  key={f}
+                  style={[s.inspFilterTab, on && s.inspFilterTabOn]}
+                  onPress={() => setInspFilter(f)}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[s.inspFilterText, on && s.inspFilterTextOn]}>
+                    {f}
+                  </Text>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -280,69 +290,117 @@ export default function FleetScreen() {
           </View>
 
           {/* List */}
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={s.inspList}
-            showsVerticalScrollIndicator={false}
-          >
-            {filteredInspections.map((insp) => (
-              <TouchableOpacity
-                key={insp.id}
-                style={s.inspCard}
-                activeOpacity={0.7}
-                onPress={() => router.push("/inspection-create")}
-              >
-                <View style={s.inspCardBody}>
-                  <Text style={s.inspTitle}>{insp.title}</Text>
-                  <Text style={s.inspType}>{insp.type}</Text>
-                  {insp.location && (
-                    <Text style={s.inspLocation}>{insp.location}</Text>
-                  )}
-                  <Text style={s.inspMeta}>Last Update: {insp.lastUpdate}</Text>
-                  <Text style={s.inspMeta}>
-                    Inspection Number: {insp.number}
-                  </Text>
-                </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color={C.textTertiary}
+          {inspLoading ? (
+            <View style={s.centered}>
+              <ActivityIndicator size="small" color={C.yellow} />
+            </View>
+          ) : (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={s.inspList}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={inspRefreshing}
+                  onRefresh={() => { setInspRefreshing(true); loadInspections(true); }}
+                  tintColor={C.yellow}
                 />
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+              }
+            >
+              {filteredInspections.length === 0 ? (
+                <View style={s.emptyInsp}>
+                  <Ionicons name="clipboard-outline" size={28} color={C.textTertiary} />
+                  <Text style={s.emptyInspText}>No inspections found</Text>
+                </View>
+              ) : (
+                filteredInspections.map((insp) => (
+                  <TouchableOpacity
+                    key={insp.id}
+                    style={s.inspCard}
+                    activeOpacity={0.7}
+                    onPress={() => router.push(`/inspection/${insp.id}` as any)}
+                  >
+                    <View style={s.inspCardBody}>
+                      <Text style={s.inspTitle}>Daily Inspection</Text>
+                      <Text style={s.inspType}>Asset: {insp.asset_id}</Text>
+                      <Text style={s.inspMeta}>
+                        Started: {new Date(insp.started_at).toLocaleString()}
+                      </Text>
+                      <View style={s.statusPill}>
+                        <View style={[s.statusDot, { backgroundColor: STATUS_COLOR[insp.status] ?? C.textTertiary }]} />
+                        <Text style={s.statusPillText}>{insp.status}</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={C.textTertiary} />
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          )}
         </View>
       ) : (
         <View style={s.body}>
-          <View style={s.empty}>
-            <Ionicons
-              name="construct-outline"
-              size={32}
-              color={C.textTertiary}
-            />
-            <Text style={s.emptyTitle}>No Assets Available</Text>
-            <Text style={s.emptySub}>
-              Scan a machine QR code or create{"\n"}an inspection to get
-              started.
-            </Text>
-          </View>
+          {/* Fleet machine list */}
+          {machinesLoading ? (
+            <View style={s.centered}>
+              <ActivityIndicator size="small" color={C.yellow} />
+            </View>
+          ) : filteredMachines.length > 0 ? (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={s.inspList}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={machinesRefreshing}
+                  onRefresh={() => { setMachinesRefreshing(true); loadMachines(true); }}
+                  tintColor={C.yellow}
+                />
+              }
+            >
+              {filteredMachines.map((machine) => (
+                <TouchableOpacity
+                  key={machine.asset_id}
+                  style={s.inspCard}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    router.push(`/inspection-create?assetId=${encodeURIComponent(machine.asset_id)}` as any)
+                  }
+                >
+                  <View style={s.inspCardBody}>
+                    <Text style={s.inspTitle}>{machine.name}</Text>
+                    <Text style={s.inspType}>{machine.machine_type}</Text>
+                    {machine.location && (
+                      <Text style={s.inspLocation}>{machine.location}</Text>
+                    )}
+                    {machine.serial_number && (
+                      <Text style={s.inspMeta}>S/N: {machine.serial_number}</Text>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={C.textTertiary} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={s.empty}>
+              <Ionicons name="construct-outline" size={32} color={C.textTertiary} />
+              <Text style={s.emptyTitle}>No Assets Available</Text>
+              <Text style={s.emptySub}>
+                Scan a machine QR code or create{"\n"}an inspection to get started.
+              </Text>
+            </View>
+          )}
 
           <View style={s.actions}>
             <TouchableOpacity style={s.glassCard} activeOpacity={0.75} onPress={() => setHandsFreeOpen(true)}>
               <View style={s.glassHighlight} />
               <View style={s.glassInner}>
                 <View style={s.glassIconCircle}>
-                  <Ionicons
-                    name="glasses-outline"
-                    size={24}
-                    color={C.charcoal}
-                  />
+                  <Ionicons name="glasses-outline" size={24} color={C.charcoal} />
                 </View>
                 <View style={s.glassText}>
                   <Text style={s.glassTitle}>Hands-free Mode</Text>
-                  <Text style={s.glassSub}>
-                    Connect supported Meta AI glasses
-                  </Text>
+                  <Text style={s.glassSub}>Connect supported Meta AI glasses</Text>
                 </View>
                 <View style={s.metaChip}>
                   <MetaLogo size={20} />
@@ -353,7 +411,7 @@ export default function FleetScreen() {
             <TouchableOpacity
               style={s.cta}
               activeOpacity={0.85}
-              onPress={() => router.push("/inspection-create")}
+              onPress={() => router.push("/inspection-create" as any)}
             >
               <View style={s.ctaHighlight} />
               <Text style={s.ctaText}>Create Inspection</Text>
@@ -626,6 +684,40 @@ const s = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.7)",
   },
   ctaText: { ...T.base, ...T.w7, color: C.textOnYellow, letterSpacing: 0.5 },
+
+  // ── Centered loader / empty
+  centered: {
+    flex: 1,
+    justifyContent: "center" as const,
+    alignItems: "center" as const,
+  },
+  emptyInsp: {
+    alignItems: "center" as const,
+    paddingTop: 48,
+    gap: S[8],
+  },
+  emptyInspText: {
+    ...T.sm,
+    color: C.textTertiary,
+  },
+
+  // ── Status pill
+  statusPill: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: S[4],
+    marginTop: S[4],
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statusPillText: {
+    ...T.xs,
+    ...T.w6,
+    color: C.textSecondary,
+  },
 
   // ── Inspections view
   inspFilterBar: {

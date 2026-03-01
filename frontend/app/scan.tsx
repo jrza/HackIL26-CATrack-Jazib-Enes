@@ -21,9 +21,10 @@ export default function ScanScreen() {
     (result: { data?: string }) => {
       if (scanned || !result?.data) return;
       setScanned(true);
-      setTimeout(() => setScanned(false), 2000);
+      const assetId = result.data.trim();
+      router.replace(`/inspection-create?assetId=${encodeURIComponent(assetId)}` as any);
     },
-    [scanned],
+    [scanned, router],
   );
 
   const hasPermission = permission?.granted ?? false;

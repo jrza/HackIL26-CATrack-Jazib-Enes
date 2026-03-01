@@ -1,5 +1,5 @@
-import { BarCodeScanner, BarCodeScannerResult } from 'expo-barcode-scanner';
-import React, { useCallback, useEffect, useState } from 'react';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import React, { useCallback, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface QRScannerProps {
@@ -8,18 +8,12 @@ interface QRScannerProps {
 }
 
 export default function QRScanner({ onScan, onError }: QRScannerProps) {
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
 
-  useEffect(() => {
-    BarCodeScanner.requestPermissionsAsync().then(({ status }) => {
-      setHasPermission(status === 'granted');
-    });
-  }, []);
-
-  const handleBarCodeScanned = useCallback(
-    ({ data }: BarCodeScannerResult) => {
-      if (scanned) return;
+  const handleBarcodeScanned = useCallback(
+    ({ data }: { data: string }) => {
+      if (scanned || !data) return;
       setScanned(true);
 
       let assetId = data.trim();
@@ -32,7 +26,7 @@ export default function QRScanner({ onScan, onError }: QRScannerProps) {
           if (parts.length > 0) assetId = parts[parts.length - 1];
         }
       } catch {
-        // not a URL – use raw value
+        // not a URL — use raw value
       }
 
       if (!assetId) {
@@ -46,7 +40,7 @@ export default function QRScanner({ onScan, onError }: QRScannerProps) {
     [scanned, onScan, onError],
   );
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.centered}>
         <Text style={styles.message}>Requesting camera permission…</Text>
@@ -54,21 +48,26 @@ export default function QRScanner({ onScan, onError }: QRScannerProps) {
     );
   }
 
-  if (!hasPermission) {
+  if (!permission.granted) {
     return (
       <View style={styles.centered}>
         <Text style={styles.message}>
-          Camera access is required to scan QR codes. Please enable it in Settings.
+          Camera access is required to scan QR codes.
         </Text>
+        <TouchableOpacity style={styles.grantBtn} onPress={requestPermission}>
+          <Text style={styles.grantBtnText}>Grant Access</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <BarCodeScanner
-        onBarCodeScanned={handleBarCodeScanned}
+      <CameraView
         style={StyleSheet.absoluteFillObject}
+        facing="back"
+        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+        onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
       />
       <View style={styles.overlay}>
         <View style={styles.viewfinder} />
@@ -94,11 +93,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
+    gap: 16,
   },
   message: {
     fontSize: 15,
     color: '#64748b',
     textAlign: 'center',
+  },
+  grantBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    backgroundColor: '#facc15',
+    borderRadius: 8,
+  },
+  grantBtnText: {
+    color: '#1e293b',
+    fontWeight: '600',
   },
   overlay: {
     flex: 1,

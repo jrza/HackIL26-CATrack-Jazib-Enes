@@ -53,7 +53,7 @@ export function useSync(): UseSyncReturn {
       const failed: FindingCreate[] = [];
       for (let i = 0; i < queue.length; i++) {
         try {
-          const response = await fetch(`${BASE_URL}/findings`, {
+          const response = await fetch(`${BASE_URL}/findings/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(queue[i]),

@@ -1,8 +1,9 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from db.supabase_client import get_client
 from models.inspection import InspectionCreate, InspectionSession, InspectionStatus, InspectionUpdate
@@ -16,6 +17,28 @@ _sessions: dict[str, dict] = {}
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+@router.get("/", response_model=List[InspectionSession])
+async def list_inspections(status: Optional[str] = Query(None)):
+    """List all inspection sessions, optionally filtered by status."""
+    supabase = get_client()
+    if supabase:
+        try:
+            query = supabase.table("inspections").select("*").order("started_at", desc=True)
+            if status:
+                query = query.eq("status", status.upper())
+            result = query.execute()
+            if result.data:
+                for s in result.data:
+                    _sessions[s["id"]] = s
+        except Exception as exc:
+            logger.error("Supabase query error: %s", exc)
+
+    sessions = list(_sessions.values())
+    if status:
+        sessions = [s for s in sessions if s.get("status") == status.upper()]
+    return [InspectionSession(**s) for s in sessions]
 
 
 @router.post("/", response_model=InspectionSession, status_code=201)

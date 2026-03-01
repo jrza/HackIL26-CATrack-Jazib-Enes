@@ -109,14 +109,14 @@ export default function InspectionScreen() {
                 <Text style={styles.assetLabel}>Asset</Text>
                 <Text style={styles.assetId}>{inspection?.asset_id ?? '—'}</Text>
               </View>
-              <View
+                <View
                 style={[
                   styles.statusBadge,
-                  inspection?.status === 'completed' && styles.statusDone,
+                  inspection?.status === 'COMPLETED' && styles.statusDone,
                 ]}
               >
                 <Text style={styles.statusText}>
-                  {inspection?.status?.toUpperCase() ?? 'ACTIVE'}
+                  {inspection?.status ?? 'ACTIVE'}
                 </Text>
               </View>
             </View>
@@ -131,12 +131,12 @@ export default function InspectionScreen() {
               <TouchableOpacity
                 style={styles.addButton}
                 onPress={() => router.push(`/inspection/checkpoint?inspectionId=${id}`)}
-                disabled={inspection?.status === 'completed'}
+                disabled={inspection?.status === 'COMPLETED'}
               >
                 <Text style={styles.addButtonText}>+ Add Finding</Text>
               </TouchableOpacity>
 
-              {inspection?.status !== 'completed' && (
+              {inspection?.status !== 'COMPLETED' && (
                 <TouchableOpacity
                   style={styles.completeButton}
                   onPress={handleComplete}

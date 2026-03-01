@@ -36,16 +36,14 @@ export default function CheckpointScreen() {
 
   const [selectedComponent, setSelectedComponent] = useState<string | null>(null);
   const [voiceTranscript, setVoiceTranscript] = useState('');
-  const [audioUri, setAudioUri] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<Finding | null>(null);
 
   const canSubmit = !!selectedComponent && (!!voiceTranscript || !!imageUri);
 
-  const handleTranscript = (t: string, uri: string) => {
+  const handleTranscript = (t: string, _uri: string) => {
     setVoiceTranscript(t);
-    setAudioUri(uri);
   };
 
   const handleSubmit = async () => {
@@ -55,9 +53,8 @@ export default function CheckpointScreen() {
     const finding: FindingCreate = {
       inspection_id: inspectionId,
       component: selectedComponent,
-      voice_transcript: voiceTranscript,
-      image_uri: imageUri,
-      audio_uri: audioUri || null,
+      voice_transcript: voiceTranscript || null,
+      image_url: imageUri,
     };
 
     try {

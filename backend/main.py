@@ -30,6 +30,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
+    redirect_slashes=False,
     title="CAT Inspect AI Co-Pilot",
     description=(
         "AI-powered equipment inspection assistant for Caterpillar heavy machinery. "

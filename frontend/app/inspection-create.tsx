@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -12,6 +14,12 @@ import {
 } from "react-native";
 import CatLogo from "../components/CatLogo";
 import { C, HIT, R, S, T } from "../constants/theme";
+import {
+  getMachineDetail,
+  startInspection,
+  Machine,
+  InspectionTemplate,
+} from "../services/api";
 
 type Icon = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -20,38 +28,8 @@ interface SectionItem {
   icon: Icon;
   status?: "complete" | "incomplete" | "none";
   detail?: string;
-  fields?: { label: string; complete: boolean }[];
+  route?: string;
 }
-
-const SECTIONS: SectionItem[] = [
-  {
-    label: "Assignment Notes",
-    icon: "chatbubble-outline",
-    status: "none",
-  },
-  {
-    label: "Customer & Asset Info",
-    icon: "business-outline",
-    status: "incomplete",
-    fields: [
-      { label: "Serial Number", complete: false },
-      { label: "Model", complete: false },
-      { label: "Service Meter Value", complete: false },
-      { label: "Service Meter Unit", complete: false },
-    ],
-  },
-  {
-    label: "General Info & Comments",
-    icon: "document-text-outline",
-    status: "none",
-  },
-  {
-    label: "1. Walk Around",
-    icon: "walk-outline",
-    status: "none",
-    detail: "0 of 5",
-  },
-];
 
 function StatusDot({ status }: { status?: string }) {
   if (status === "incomplete") {
@@ -65,6 +43,81 @@ function StatusDot({ status }: { status?: string }) {
 
 export default function InspectionCreateScreen() {
   const router = useRouter();
+  const { assetId } = useLocalSearchParams<{ assetId?: string }>();
+
+  const [machine, setMachine] = useState<Machine | null>(null);
+  const [template, setTemplate] = useState<InspectionTemplate | null>(null);
+  const [inspectionId, setInspectionId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!assetId) return;
+    setLoading(true);
+    getMachineDetail(assetId)
+      .then(async (detail) => {
+        setMachine(detail.machine);
+        setTemplate(detail.template);
+        const session = await startInspection(assetId);
+        setInspectionId(session.id);
+      })
+      .catch((err) => {
+        Alert.alert("Error", `Could not start inspection: ${(err as Error).message}`);
+      })
+      .finally(() => setLoading(false));
+  }, [assetId]);
+
+  const sections: SectionItem[] = [
+    {
+      label: "Assignment Notes",
+      icon: "chatbubble-outline",
+      status: "none",
+    },
+    {
+      label: "Customer & Asset Info",
+      icon: "business-outline",
+      status: machine ? "complete" : "incomplete",
+      route: "/customer-asset",
+    },
+    {
+      label: "General Info & Comments",
+      icon: "document-text-outline",
+      status: "none",
+      route: "/general-info",
+    },
+    {
+      label: "1. Walk Around",
+      icon: "walk-outline",
+      status: "none",
+      detail: template ? `0 of ${template.checkpoints.length}` : "0 of 5",
+      route: "/walkaround",
+    },
+  ];
+
+  const handleSectionPress = (section: SectionItem) => {
+    if (!section.route) return;
+    if (section.label.includes("Walk Around")) {
+      if (!inspectionId) {
+        Alert.alert("Please wait", "Inspection is being created...");
+        return;
+      }
+      router.push(`/walkaround?inspectionId=${inspectionId}` as any);
+    } else if (section.label.includes("Customer & Asset")) {
+      router.push("/customer-asset" as any);
+    } else if (section.label.includes("General Info")) {
+      router.push("/general-info" as any);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!inspectionId) {
+      Alert.alert("Not ready", "Inspection has not been created yet.");
+      return;
+    }
+    setSubmitting(true);
+    router.push(`/inspection/complete?inspectionId=${inspectionId}` as any);
+    setSubmitting(false);
+  };
 
   return (
     <View style={s.root}>
@@ -96,16 +149,40 @@ export default function InspectionCreateScreen() {
         <View style={s.machineBadgeInner}>
           <CatLogo size={22} letterColor={C.charcoal} triangleColor={C.yellow} />
           <View style={s.machineTextGroup}>
-            <Text style={s.machineFamily}>FAMILY-ALL</Text>
-            <Text style={s.machineMake}>CATERPILLAR</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color={C.yellow} />
+            ) : (
+              <>
+                <Text style={s.machineFamily}>
+                  {machine ? machine.name : assetId ?? "UNKNOWN ASSET"}
+                </Text>
+                <Text style={s.machineMake}>
+                  {machine ? machine.machine_type : "CATERPILLAR"}
+                </Text>
+              </>
+            )}
           </View>
+          {inspectionId && (
+            <View style={s.inspIdBadge}>
+              <Ionicons name="checkmark-circle" size={14} color={C.pass} />
+              <Text style={s.inspIdText}>Created</Text>
+            </View>
+          )}
         </View>
       </View>
 
       {/* ── Sync info ──────────────────────────────── */}
       <View style={s.syncRow}>
-        <Ionicons name="cloud-done-outline" size={14} color={C.textTertiary} />
-        <Text style={s.syncText}>Last synced: 2/28/2026, 11:06 AM</Text>
+        <Ionicons
+          name={inspectionId ? "cloud-done-outline" : "cloud-outline"}
+          size={14}
+          color={C.textTertiary}
+        />
+        <Text style={s.syncText}>
+          {inspectionId
+            ? `Inspection ID: ${inspectionId.slice(0, 8)}…`
+            : "Preparing inspection…"}
+        </Text>
       </View>
 
       {/* ── Sections list ──────────────────────────── */}
@@ -114,20 +191,12 @@ export default function InspectionCreateScreen() {
         contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {SECTIONS.map((section, i) => (
+        {sections.map((section, i) => (
           <TouchableOpacity
             key={i}
             style={s.sectionCard}
-            activeOpacity={0.7}
-            onPress={() => {
-              if (section.label.includes("Walk Around")) {
-                router.push("/walkaround" as any);
-              } else if (section.label.includes("Customer & Asset")) {
-                router.push("/customer-asset" as any);
-              } else if (section.label.includes("General Info")) {
-                router.push("/general-info" as any);
-              }
-            }}
+            activeOpacity={section.route ? 0.7 : 1}
+            onPress={() => handleSectionPress(section)}
           >
             <View style={s.sectionHighlight} />
             <View style={s.sectionInner}>
@@ -140,27 +209,14 @@ export default function InspectionCreateScreen() {
                     <StatusDot status={section.status} />
                     <Text style={s.sectionLabel}>{section.label}</Text>
                   </View>
-
-                  {section.fields && (
-                    <View style={s.fieldsList}>
-                      {section.fields.map((f, j) => (
-                        <Text key={j} style={s.fieldItem}>
-                          <Text style={s.fieldStatus}>
-                            {f.complete ? "Complete" : "Incomplete"}
-                          </Text>
-                          {" - "}
-                          {f.label}
-                        </Text>
-                      ))}
-                    </View>
-                  )}
-
                   {section.detail && (
                     <Text style={s.sectionDetail}>{section.detail}</Text>
                   )}
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={C.textTertiary} />
+              {section.route && (
+                <Ionicons name="chevron-forward" size={18} color={C.textTertiary} />
+              )}
             </View>
           </TouchableOpacity>
         ))}
@@ -169,11 +225,22 @@ export default function InspectionCreateScreen() {
       {/* ── Bottom actions ─────────────────────────── */}
       <SafeAreaView>
         <View style={s.bottomBar}>
-          <TouchableOpacity style={s.secondaryBtn} activeOpacity={0.7}>
-            <Text style={s.secondaryBtnText}>Reassign</Text>
+          <TouchableOpacity
+            style={s.secondaryBtn}
+            activeOpacity={0.7}
+            onPress={() => router.back()}
+          >
+            <Text style={s.secondaryBtnText}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.submitBtn} activeOpacity={0.85}>
-            <Text style={s.submitBtnText}>Submit</Text>
+          <TouchableOpacity
+            style={[s.submitBtn, (!inspectionId || submitting) && s.submitBtnDisabled]}
+            activeOpacity={0.85}
+            onPress={handleSubmit}
+            disabled={!inspectionId || submitting}
+          >
+            <Text style={s.submitBtnText}>
+              {submitting ? "Submitting…" : "Submit"}
+            </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -239,6 +306,7 @@ const s = StyleSheet.create({
     gap: S[12],
   },
   machineTextGroup: {
+    flex: 1,
     gap: S[2],
   },
   machineFamily: {
@@ -250,6 +318,16 @@ const s = StyleSheet.create({
     ...T.sm,
     ...T.w5,
     color: C.textSecondary,
+  },
+  inspIdBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: S[4],
+  },
+  inspIdText: {
+    ...T.xs,
+    ...T.w6,
+    color: C.pass,
   },
 
   // Sync
@@ -339,19 +417,6 @@ const s = StyleSheet.create({
     borderRadius: R.pill,
   },
 
-  // Incomplete fields list
-  fieldsList: {
-    gap: S[2],
-  },
-  fieldItem: {
-    ...T.sm,
-    color: C.textSecondary,
-  },
-  fieldStatus: {
-    color: C.critical,
-    ...T.w6,
-  },
-
   // Bottom bar
   bottomBar: {
     flexDirection: "row",
@@ -388,6 +453,9 @@ const s = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.5)",
+  },
+  submitBtnDisabled: {
+    opacity: 0.45,
   },
   submitBtnText: {
     ...T.base,

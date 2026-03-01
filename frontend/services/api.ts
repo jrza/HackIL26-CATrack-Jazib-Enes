@@ -2,22 +2,34 @@ import { SeverityLevel } from '../constants/severity';
 
 export interface Machine {
   asset_id: string;
-  model: string;
-  serial_number: string;
-  location: string;
+  name: string;
+  machine_type: string;
+  serial_number: string | null;
+  model_number: string | null;
   last_inspection_date: string | null;
-  total_hours: number | null;
+  inspection_template_id: string | null;
+  location: string | null;
+}
+
+export interface InspectionTemplate {
+  id: string;
+  name: string;
+  checkpoints: string[];
+}
+
+export interface MachineDetail {
+  machine: Machine;
+  template: InspectionTemplate | null;
 }
 
 export interface InspectionSession {
   id: string;
   asset_id: string;
   operator_id: string | null;
-  status: 'active' | 'completed' | 'cancelled';
+  status: 'ACTIVE' | 'COMPLETED' | 'ABANDONED';
   started_at: string;
   completed_at: string | null;
-  checkpoints_total: number;
-  checkpoints_completed: number;
+  template_id: string | null;
 }
 
 export interface Finding {
@@ -29,17 +41,18 @@ export interface Finding {
   severity: SeverityLevel;
   confidence: number;
   recommended_action: string;
-  image_uri: string | null;
-  audio_uri: string | null;
-  created_at: string;
+  operational_impact: string;
+  image_url: string | null;
+  voice_transcript: string | null;
+  timestamp: string;
 }
 
 export interface FindingCreate {
   inspection_id: string;
   component: string;
-  voice_transcript: string;
-  image_uri: string | null;
-  audio_uri: string | null;
+  voice_transcript?: string | null;
+  image_b64?: string | null;
+  image_url?: string | null;
 }
 
 export interface Report {
@@ -84,15 +97,32 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function listMachines(): Promise<Machine[]> {
+  const data = await request<{ machines: Machine[] }>('/machine/');
+  return data.machines;
+}
+
+export async function getMachineDetail(assetId: string): Promise<MachineDetail> {
+  return request<MachineDetail>(`/machine/${encodeURIComponent(assetId)}`);
+}
+
 export async function getMachine(assetId: string): Promise<Machine> {
-  return request<Machine>(`/machine/${encodeURIComponent(assetId)}`);
+  const detail = await getMachineDetail(assetId);
+  return detail.machine;
+}
+
+export async function listInspections(status?: string): Promise<InspectionSession[]> {
+  const path = status
+    ? `/inspection/?status=${encodeURIComponent(status)}`
+    : '/inspection/';
+  return request<InspectionSession[]>(path);
 }
 
 export async function startInspection(
   assetId: string,
   operatorId?: string,
 ): Promise<InspectionSession> {
-  return request<InspectionSession>('/inspection', {
+  return request<InspectionSession>('/inspection/', {
     method: 'POST',
     body: JSON.stringify({ asset_id: assetId, operator_id: operatorId ?? null }),
   });
@@ -123,7 +153,7 @@ export async function completeInspection(inspectionId: string): Promise<Inspecti
 }
 
 export async function submitFinding(finding: FindingCreate): Promise<Finding> {
-  return request<Finding>('/findings', {
+  return request<Finding>('/findings/', {
     method: 'POST',
     body: JSON.stringify(finding),
   });

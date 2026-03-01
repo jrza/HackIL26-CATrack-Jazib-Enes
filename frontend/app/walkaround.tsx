@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -11,6 +13,8 @@ import {
   View,
 } from "react-native";
 import { C, HIT, R, S, T } from "../constants/theme";
+import { submitFinding } from "../services/api";
+import { saveOfflineFinding } from "../services/storage";
 
 type Rating = "normal" | "monitor" | "action" | "na" | null;
 type Icon = React.ComponentProps<typeof Ionicons>["name"];
@@ -55,12 +59,54 @@ const OPTIONS: { key: Rating; label: string; icon: Icon; color: string }[] = [
   { key: "na",      label: "N/A",     icon: "checkmark",        color: C.textTertiary },
 ];
 
+const RATING_TO_SEVERITY: Record<string, string> = {
+  action: "CRITICAL",
+  monitor: "MONITOR",
+  normal: "PASS",
+  na: "PASS",
+};
+
 export default function WalkAroundScreen() {
   const router = useRouter();
+  const { inspectionId } = useLocalSearchParams<{ inspectionId?: string }>();
   const [ratings, setRatings] = useState<Record<string, Rating>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   const setRating = (id: string, value: Rating) => {
     setRatings((prev) => ({ ...prev, [id]: value }));
+  };
+
+  const handleDone = async () => {
+    if (!inspectionId) {
+      router.back();
+      return;
+    }
+
+    const ratedItems = CHECKLIST.filter((item) => ratings[item.id]);
+    if (ratedItems.length === 0) {
+      router.back();
+      return;
+    }
+
+    setSubmitting(true);
+    for (const item of ratedItems) {
+      const rating = ratings[item.id];
+      if (!rating || rating === "na" || rating === "normal") continue;
+
+      const finding = {
+        inspection_id: inspectionId,
+        component: "Walk Around",
+        voice_transcript: `${item.id}: ${item.label} — rated ${rating}`,
+      };
+
+      try {
+        await submitFinding(finding);
+      } catch {
+        await saveOfflineFinding(finding);
+      }
+    }
+    setSubmitting(false);
+    router.back();
   };
 
   return (
@@ -144,8 +190,17 @@ export default function WalkAroundScreen() {
           >
             <Text style={s.secondaryBtnText}>Previous</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.doneBtn} activeOpacity={0.85}>
-            <Text style={s.doneBtnText}>Done</Text>
+          <TouchableOpacity
+            style={[s.doneBtn, submitting && { opacity: 0.5 }]}
+            activeOpacity={0.85}
+            onPress={handleDone}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator size="small" color={C.textOnYellow} />
+            ) : (
+              <Text style={s.doneBtnText}>Done</Text>
+            )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>

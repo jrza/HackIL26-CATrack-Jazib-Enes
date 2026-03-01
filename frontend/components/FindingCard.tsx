@@ -10,7 +10,7 @@ interface FindingCardProps {
 export default function FindingCard({ finding }: FindingCardProps) {
   const severityColor = SEVERITY_COLORS[finding.severity];
   const severityLabel = SEVERITY_LABELS[finding.severity];
-  const timestamp = new Date(finding.created_at).toLocaleString();
+  const timestamp = new Date(finding.timestamp).toLocaleString();
   const confidencePct = Math.round(finding.confidence * 100);
 
   return (
